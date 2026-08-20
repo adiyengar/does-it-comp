@@ -10,10 +10,13 @@ import streamlit as st
 from src.capture import get_canonical, save_canonical, save_expert_response
 from src.db import get_conn, init_db
 from src.escalate import get_escalation
+from src.extract import extract_parts
 from src.models import CanonicalAnswer, ExpertResponse
 from src.pipeline import run as run_pipeline
+from src.seed import seed_if_empty
 
 init_db()
+seed_if_empty()
 st.set_page_config(page_title="Compatibility Agent PoC", layout="wide")
 
 REASON_CODES = [
@@ -130,32 +133,38 @@ view = st.sidebar.radio("View", ["Ask a Question", "Audit Log"])
 # ── Rep View ─────────────────────────────────────────────────────────────────
 if view == "Ask a Question":
     st.title("Product Compatibility Agent")
-    st.caption(
-        "Cited answers or expert escalation — never a guess. "
-        "Every answer is logged with a record ID."
-    )
+    st.caption("Ask a compatibility question in plain language. Cited answer or expert escalation — never a guess.")
 
     with st.form("query_form"):
         question = st.text_input(
-            "Question",
-            placeholder="Can I use X with Y?",
+            "Your question",
+            placeholder="e.g. Can I use a Logitech Rally Bar with Teams?",
+            label_visibility="collapsed",
         )
-        col1, col2 = st.columns(2)
-        part_a = col1.text_input("Product A", placeholder="e.g. SFP-10G-SR")
-        part_b = col2.text_input("Product B", placeholder="e.g. WS-C3750X-48T")
-        submitted = st.form_submit_button("Check Compatibility", type="primary")
+        submitted = st.form_submit_button("Check compatibility →", type="primary", use_container_width=True)
 
-    if submitted and question and part_a and part_b:
-        with st.spinner("Checking …"):
-            result = run_pipeline(question, part_a, part_b)
+    if submitted and question.strip():
+        result = None
+
+        with st.status("Checking compatibility…", expanded=True) as status:
+            st.write("Identifying products…")
+            part_a, part_b = extract_parts(question)
+            if part_a and part_b:
+                st.write(f"Checking **{part_a}** ↔ **{part_b}**")
+            else:
+                st.write("Couldn't identify two products — routing to expert.")
+
+            st.write("Searching evidence…")
+            result = run_pipeline(question, part_a or question, part_b or question)
+            status.update(label="Done", state="complete", expanded=False)
 
         src = result["source"]
 
         if src == "cache":
-            st.success("Instant answer — verified by expert, served from cache")
-            st.markdown(
-                f"*Verified by {result.get('verified_by', 'expert')} "
-                f"on {result.get('verified_at', '')[:10]}*"
+            st.success("Instant answer — expert-verified, served from cache")
+            st.caption(
+                f"Verified by {result.get('verified_by', 'expert')} "
+                f"· {result.get('verified_at', '')[:10]}"
             )
             st.markdown(result["text"])
 
@@ -171,17 +180,14 @@ if view == "Ask a Question":
                         cond = f" — {', '.join(e['conditions'])}" if e.get("conditions") else ""
                         st.markdown(f"**{e['tier']}** · [{e['source']}]({e['url']}){cond}")
 
-            st.caption(f"Question ID: `{result['question_id']}`")
+            st.caption(f"Record `{result['question_id']}`")
 
         elif src == "escalation":
             esc_id = result["escalation_id"]
             deep_link = f"?escalation_id={esc_id}"
 
             st.warning("Routed to expert for review")
-            st.markdown(
-                f"**Expert review link:** "
-                f"[Open review screen]({deep_link})"
-            )
+            st.markdown(f"**Expert review →** [{deep_link}]({deep_link})")
 
             with st.expander("Rendered notification (as it would be sent)"):
                 st.code(result["notification"], language=None)
@@ -190,7 +196,7 @@ if view == "Ask a Question":
                 for flag in result.get("risk_flags", []):
                     st.markdown(f"- {flag}")
 
-            st.caption(f"Escalation ID: `{esc_id}`")
+            st.caption(f"Escalation `{esc_id}`")
 
 # ── Audit Log ─────────────────────────────────────────────────────────────────
 else:

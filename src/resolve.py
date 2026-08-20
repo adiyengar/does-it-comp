@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import anthropic
 from .db import get_conn
 
@@ -11,6 +12,11 @@ def _get_client() -> anthropic.Anthropic:
     if _client is None:
         _client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     return _client
+
+
+def _normalize(s: str) -> str:
+    """Strip spaces, hyphens, dots; lowercase — for fuzzy comparison."""
+    return re.sub(r"[\s\-\./]", "", s.lower())
 
 
 def known_pids() -> list[str]:
@@ -28,10 +34,23 @@ def resolve(text: str) -> tuple[str, float]:
     if not pids:
         return "", 0.0
 
+    # Exact match
     upper = text.strip().upper()
     for pid in pids:
         if pid.upper() == upper:
             return pid, 1.0
+
+    # Normalized match: ignore spaces / hyphens / dots ("Microsoft Teams Rooms" → "Microsoft-Teams-Rooms")
+    norm = _normalize(text)
+    for pid in pids:
+        if _normalize(pid) == norm:
+            return pid, 0.99
+
+    # Substring: only shortcut if exactly one PID contains the input — else let Claude disambiguate
+    if norm:
+        substr_matches = [pid for pid in pids if norm in _normalize(pid)]
+        if len(substr_matches) == 1:
+            return substr_matches[0], 0.90
 
     prompt = (
         f"You are a product catalog resolver for network and AV hardware.\n\n"
