@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show *)",
+      "Bash(pip install *)",
+      "Bash(pip3 show *)",
+      "Bash(uv --version)",
+      "Bash(brew list *)",
+      "Read(//opt/homebrew/**)",
+      "Read(//Users/adisheshiyengar/.pyenv/**)"
+    ]
+  }
+}
