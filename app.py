@@ -199,7 +199,7 @@ if view == "Ask a Question":
             st.caption(f"Escalation `{esc_id}`")
 
 # ── Audit Log ─────────────────────────────────────────────────────────────────
-else:
+elif view == "Audit Log":
     st.title("Audit Log")
     st.caption("Every question, its gate decision, evidence, and outcome.")
 
