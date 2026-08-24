@@ -128,7 +128,7 @@ if "escalation_id" in params:
     st.stop()
 
 # ── Sidebar navigation ────────────────────────────────────────────────────────
-view = st.sidebar.radio("View", ["Ask a Question", "Audit Log"])
+view = st.sidebar.radio("View", ["Ask a Question", "Audit Log", "About"])
 
 # ── Rep View ─────────────────────────────────────────────────────────────────
 if view == "Ask a Question":
@@ -245,3 +245,114 @@ else:
             for r in rows
         ]
         st.dataframe(pd.DataFrame(data), use_container_width=True)
+
+# ── About ─────────────────────────────────────────────────────────────────────
+elif view == "About":
+    st.title("About this agent")
+    st.caption("A proof of concept for risk-aware product compatibility answers.")
+
+    st.markdown("""
+### What it does
+
+Sales reps escalate compatibility questions not because they can't find the answer —
+it's because they don't want to own being wrong. This agent provides **cited, logged,
+institutionally-backed answers**, and a clean handoff to a human expert when the
+evidence isn't strong enough to answer automatically.
+
+Every answer carries a source, a retrieval date, and a record ID. No answer is ever
+fabricated. When the agent can't answer with confidence, it escalates — with the
+research already done and the specific uncertainty stated — rather than guessing.
+""")
+
+    st.divider()
+    st.markdown("### Data sources")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+**Microsoft Teams Rooms — Certified Hardware**
+- [Teams Rooms Certified Hardware](https://learn.microsoft.com/en-us/microsoftteams/rooms/certified-hardware)
+- [Teams Panels Certified Hardware](https://learn.microsoft.com/en-us/microsoftteams/devices/teams-panels-certified-hardware)
+
+Certification is binary and authoritative. Every device on these pages is
+**Tier 1 evidence** — an explicit vendor statement that the device is supported
+on the platform.
+""")
+    with col2:
+        st.markdown("""
+**Cisco TMG Compatibility Matrix**
+- [tmgmatrix.cisco.com](https://tmgmatrix.cisco.com)
+
+Maps optical transceivers to Cisco network devices. Currently requires a manual
+Excel export — the pytmg API client is returning errors from the Cisco side.
+Drop an export into `data/raw/` and run `scripts/ingest_cisco_tmg.py` to activate
+this lane.
+
+*Cisco's disclaimer: data is informational and not a guarantee.*
+""")
+
+    st.divider()
+    st.markdown("### The four answer shapes")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.success("**Confirmed**")
+        st.markdown("""
+Tier 1 evidence explicitly states these two products are supported together,
+with no conditions. The agent answers automatically and cites the source.
+
+*Example: Logitech Rally Bar + Microsoft Teams Rooms*
+""")
+
+        st.error("**Negative with alternative**")
+        st.markdown("""
+Tier 1 evidence says these products are not compatible, but the agent
+found other products in the matrix that are. Surfaces alternatives rather
+than leaving the rep empty-handed.
+
+*Example: a device not on the certified list, with alternatives shown*
+""")
+
+    with col2:
+        st.warning("**Conditional**")
+        st.markdown("""
+Compatible, but only under specific conditions — a required adapter,
+minimum firmware version, or configuration step. The condition is cited
+directly from the source.
+
+*Example: Cisco transceiver supported with a specific adapter noted in TMG*
+""")
+
+        st.warning("**Escalated**")
+        st.markdown("""
+The evidence isn't strong enough to answer automatically. The agent hands
+off to a human expert with the draft answer, all evidence found, and
+a specific statement of what's uncertain.
+
+Every escalation is a data collection event. The expert's answer is
+captured and the next identical question is answered instantly from cache.
+""")
+
+    st.divider()
+    st.markdown("### How the risk gate works")
+    st.markdown("""
+The gate is **deterministic Python — no LLM, no self-reported confidence**.
+It escalates if any of these conditions are true:
+
+| Trigger | Why |
+|---------|-----|
+| SKU resolution confidence < 0.85 | Wrong part number = wrong answer |
+| Question type is licensing, warranty, performance, or "other" | High-liability categories always go to a human |
+| No Tier 1 evidence present | Only explicit vendor statements auto-answer |
+| Two sources contradict each other | Conflict requires human judgment |
+| Draft contains no cited evidence | Uncitable claims don't go out |
+| Evidence older than 365 days | Stale data may not reflect current product lines |
+
+The gate thresholds are configurable in `src/gate.py`. Coverage expands only
+when expert verdicts justify it — not by relaxing thresholds on a hunch.
+""")
+
+    st.divider()
+    st.markdown("""
+*Built with [Streamlit](https://streamlit.io) · [Anthropic API](https://anthropic.com) · SQLite*
+""")
